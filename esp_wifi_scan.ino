@@ -11,9 +11,13 @@
 #define RES_HEADER "<h1>Testing ESP8266</h1><h3>misan128</h3><form action='data'><ul>"
 #define RES_FOOTER "<li>Password: <input type='password' name='password'></li><li><input type='submit' value='Submit'></li></ul></form>"
 
+#define RES_PAIRED "<h2>Already Paired</h2>"
 
 const char* ssid = "ESP";
 const char* password = "123456789";
+
+String inet_ssid = "";
+String inet_password = "";
 
 ESP8266WebServer server(80);
 
@@ -21,7 +25,12 @@ String res_items[MAX_NETWORKS_DISPLAYED];
 int total_items;
 boolean paired = false;
 
-
+void clean_buffer();
+void reset_app();
+void scan_network();
+void handle_data();
+String pairing_response();
+String paired_response();
 
 void clean_buffer(){
   for(int i = 0; i < MAX_NETWORKS_DISPLAYED; i++){
@@ -66,11 +75,19 @@ void scan_network(){
 
 void handle_data(){
   // get the value of request argument "state" and convert it to an int
-  String ssid = server.arg("ssid");
-  String password = server.arg("password");
-
-  Serial.print("SSID: " + ssid + " - PASS:" + password);
-
+  if(!paired){
+    String ssid = server.arg("ssid");
+  
+    String password = server.arg("password");
+  
+    Serial.print("SSID: " + ssid + " - PASS:" + password);
+  
+    inet_ssid = ssid;
+    inet_password = password;
+  
+    paired = true;
+  }
+  server_response();
 }
 
 void setup() {
@@ -89,18 +106,44 @@ void setup() {
   WiFi.softAP(ssid,password);
 
   server.on("/", [](){
-    String response = RES_HEADER;
-    for(int i = 0; i < total_items; i++){
-      response = String(response + res_items[i]);
-    }
-    response = String(response + RES_FOOTER);
-    server.send(200, "text/html", response);
+    server_response();  
   });
   
   server.on("/data", handle_data);
 
+  server.on("/reset", reset_app);
+
   // Start the server
   server.begin();
+}
+
+void reset_app(){
+  clean_buffer();
+  inet_ssid = "";
+  inet_password = "";
+  paired = false;
+  scan_network();
+  server_response();
+}
+
+void server_response(){
+  String response = paired ? paired_response() : pairing_response();
+  server.send(200, "text/html", response);
+}
+
+String pairing_response(){
+  String response = RES_HEADER;
+  for(int i = 0; i < total_items; i++){
+    response = String(response + res_items[i]);
+  }
+  response = String(response + RES_FOOTER);
+  return response;
+}
+
+String paired_response(){
+  String response = RES_PAIRED;
+  response = String(response + "<p>Connected with SSID: " + inet_ssid + "</p>");
+  return response;
 }
 
 void loop() {
