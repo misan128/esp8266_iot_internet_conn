@@ -3,8 +3,15 @@
     The API is almost the same as with the WiFi Shield library,
     the most obvious difference being the different file you need to include:
 */
+#include <Arduino.h>
+
 #include "ESP8266WiFi.h"
 #include <ESP8266WebServer.h>
+#include <ESP8266WiFiMulti.h>
+
+#include <ESP8266HTTPClient.h>
+
+#include <WiFiClient.h>
 
 #define MAX_NETWORKS_DISPLAYED 10
 
@@ -20,6 +27,7 @@ String inet_ssid = "";
 String inet_password = "";
 
 ESP8266WebServer server(80);
+ESP8266WiFiMulti WiFiMulti;
 
 String res_items[MAX_NETWORKS_DISPLAYED];
 int total_items;
@@ -86,8 +94,19 @@ void handle_data(){
     inet_password = password;
   
     paired = true;
+    internet_connect();
+  }else{
+    server_response();
   }
-  server_response();
+}
+
+void internet_connect(){
+  WiFi.mode(WIFI_STA);
+  char ssid[40], password[40];
+  inet_ssid.toCharArray(ssid, sizeof(ssid));
+  inet_password.toCharArray(password, sizeof(ssid));
+  WiFiMulti.addAP(ssid, password);
+  //WiFiMulti.addAP("Orange-8A76", "E57E9A9F");
 }
 
 void setup() {
@@ -152,5 +171,36 @@ void loop() {
     // Wait a bit before scanning again
   //delay(5000);
   server.handleClient();
-  
+  if(paired){
+    
+    if ((WiFiMulti.run() == WL_CONNECTED)) {
+      WiFiClient client;
+      HTTPClient http;
+      Serial.print("[HTTP] begin...\n");
+      
+      if (http.begin(client, "http://jigsaw.w3.org/HTTP/connection.html")) {  // HTTP
+        Serial.print("[HTTP] GET...\n");
+        // start connection and send HTTP header
+        int httpCode = http.GET();
+
+        // httpCode will be negative on error
+        if (httpCode > 0) {
+          // HTTP header has been send and Server response header has been handled
+          Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+          // file found at server
+          if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+            String payload = http.getString();
+            Serial.println(payload);
+          }
+        } else {
+          Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+        }
+        http.end();
+      } else {
+        Serial.printf("[HTTP} Unable to connect\n");
+     }
+    }
+    delay(10000);
+  }
 }
